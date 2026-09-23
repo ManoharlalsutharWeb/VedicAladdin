@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NY Deep Dive — VedicAladdin V6</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root{
+  --bg:#1a1a2e;--bg2:#16213e;--card:#0f3460;--accent:#FF6B00;
+  --bull:#00e676;--bear:#ff1744;--warn:#ffd740;--text:#e0e0e0;--dim:#9e9e9e;
+  --border:rgba(255,255,255,0.1);--r:10px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',sans-serif;min-height:100vh}
+.topbar{background:linear-gradient(135deg,var(--bg2),var(--card));padding:14px 20px;
+  display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.back-btn{background:var(--card);border:1px solid var(--border);color:var(--text);
+  padding:7px 14px;border-radius:8px;cursor:pointer;font-size:13px}
+.back-btn:hover{border-color:var(--accent)}
+.title{font-size:17px;font-weight:700;color:var(--accent)}
+.date-nav{display:flex;gap:8px;align-items:center;margin-left:auto}
+.dnav-btn{background:var(--card);border:1px solid var(--border);color:var(--text);
+  width:34px;height:34px;border-radius:8px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center}
+.dnav-btn:hover{background:var(--accent);border-color:var(--accent)}
+.date-inp{background:var(--card);color:var(--text);border:1px solid var(--border);
+  padding:7px 10px;border-radius:8px;font-size:13px}
+/* Overall signal bar */
+.signal-bar{background:linear-gradient(135deg,var(--card),var(--bg2));padding:18px 20px;
+  display:flex;align-items:center;gap:16px;flex-wrap:wrap;border-bottom:1px solid var(--border)}
+.sig-label{font-size:28px;font-weight:800}
+.sig-meta{font-size:13px;color:var(--dim);line-height:1.8}
+.crash-badge{background:rgba(255,23,68,0.15);border:1px solid var(--bear);color:var(--bear);
+  padding:5px 12px;border-radius:20px;font-size:12px;font-weight:700}
+.actions{margin-left:auto;display:flex;gap:8px}
+.act-btn{padding:7px 14px;border-radius:8px;border:1px solid var(--border);background:var(--card);
+  color:var(--text);cursor:pointer;font-size:12px}
+.act-btn:hover{border-color:var(--accent);color:var(--accent)}
+/* Blocks */
+.blocks{padding:16px 20px;max-width:1200px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+.block{background:var(--card);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
+.block-header{padding:13px 18px;display:flex;align-items:center;gap:10px;cursor:pointer;
+  background:rgba(255,255,255,0.03);border-bottom:1px solid var(--border)}
+.block-icon{font-size:20px}
+.block-title{font-size:15px;font-weight:700;flex:1}
+.block-badge{padding:3px 10px;border-radius:12px;font-size:11px;font-weight:600}
+.block-toggle{color:var(--dim);font-size:18px;transition:.2s}
+.block-body{padding:16px 18px}
+.block.collapsed .block-body{display:none}
+.block.collapsed .block-toggle{transform:rotate(-90deg)}
+/* Layer list (Block A) */
+.layers{display:flex;flex-direction:column;gap:8px}
+.layer{background:rgba(255,255,255,0.03);border-radius:8px;padding:12px 14px;
+  border-left:3px solid var(--accent)}
+.layer-num{font-size:11px;color:var(--dim);font-weight:700;text-transform:uppercase;letter-spacing:1px}
+.layer-text{font-size:13px;margin-top:4px;line-height:1.5}
+.layer-score{float:right;font-weight:700;font-size:14px}
+/* Probability bars (Block B) */
+.prob-bars{display:flex;flex-direction:column;gap:8px}
+.prob-row{display:flex;align-items:center;gap:10px}
+.prob-label{width:150px;font-size:13px;flex-shrink:0}
+.prob-bar-wrap{flex:1;background:rgba(255,255,255,0.05);border-radius:4px;height:22px;overflow:hidden}
+.prob-bar-fill{height:100%;border-radius:4px;display:flex;align-items:center;padding-left:8px;
+  font-size:12px;font-weight:700;color:#fff;min-width:30px;transition:width 0.8s ease}
+.prob-pct{width:44px;text-align:right;font-size:13px;font-weight:700}
+/* Timeline (Block C) */
+.timeline-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px}
+.time-slot{border-radius:8px;padding:10px;text-align:center;border:1px solid rgba(255,255,255,0.08)}
+.time-slot.best{border-color:var(--bull);box-shadow:0 0 12px rgba(0,230,118,0.2)}
+.time-slot.avoid{border-color:var(--bear);opacity:0.7}
+.ts-time{font-size:12px;color:var(--dim)}
+.ts-qual{font-size:18px;font-weight:800;margin:3px 0}
+.ts-hora{font-size:11px}
+/* Moments (Block D) */
+.moments-list{display:flex;flex-direction:column;gap:8px}
+.moment-item{display:flex;gap:12px;align-items:flex-start;padding:10px 12px;
+  background:rgba(255,255,255,0.03);border-radius:8px}
+.moment-time{font-size:12px;color:var(--accent);font-weight:700;min-width:50px}
+.moment-text{font-size:13px;line-height:1.5}
+.moment-high{border-left:3px solid var(--warn)}
+/* Crash rules (Block E) */
+.crash-meter-wrap{display:flex;align-items:center;gap:16px;margin-bottom:16px;flex-wrap:wrap}
+.crash-score-big{font-size:48px;font-weight:800}
+.crash-cat{font-size:16px;font-weight:600}
+.rules-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:6px}
+.rule-item{padding:8px 12px;border-radius:7px;font-size:12px;display:flex;gap:8px;align-items:flex-start}
+.rule-item.triggered{background:rgba(255,23,68,0.1);border:1px solid rgba(255,23,68,0.3)}
+.rule-item.not-trig{background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);color:var(--dim)}
+.rule-icon{flex-shrink:0;font-size:14px}
+/* ML Block F */
+.ml-matches{display:flex;flex-direction:column;gap:10px}
+.ml-match{background:rgba(255,255,255,0.04);border-radius:8px;padding:12px 14px;
+  border-left:3px solid var(--accent)}
+.ml-match-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.ml-date{font-size:13px;font-weight:700}
+.ml-sim{font-size:12px;color:var(--dim)}
+.ml-desc{font-size:12px;line-height:1.5;color:var(--text)}
+.ml-outcome{font-size:16px;font-weight:700;margin-top:6px}
+.ml-verdict{background:rgba(255,107,0,0.1);border:1px solid var(--accent);
+  border-radius:8px;padding:12px 14px;margin-top:12px;font-size:14px;line-height:1.6}
+/* Loading */
+.loading{text-align:center;padding:60px 20px;color:var(--dim);font-size:16px}
+.spinner{width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--accent);
+  border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 16px}
+@keyframes spin{to{transform:rotate(360deg)}}
+/* Responsive */
+@media(max-width:600px){.signal-bar{flex-direction:column;align-items:flex-start}.blocks{padding:10px}}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <button class="back-btn" onclick="window.location.href='/app/index.html'">← वापस</button>
+  <span class="title">🗽 NY DEEP DIVE — 6 ब्लॉक विश्लेषण</span>
+  <div class="date-nav">
+    <button class="dnav-btn" onclick="navDate(-1)">◀</button>
+    <input class="date-inp" type="date" id="datePicker" min="1971-01-01" max="2035-12-31" onchange="loadDate(this.value)">
+    <button class="dnav-btn" onclick="navDate(1)">▶</button>
+  </div>
+</div>
+
+<div id="loadingDiv" class="loading">
+  <div class="spinner"></div>
+  NY Deep Dive लोड हो रहा है...
+</div>
+
+<div id="appDiv" style="display:none">
+  <div class="signal-bar">
+    <div class="sig-label" id="sigLabel">—</div>
+    <div class="sig-meta" id="sigMeta">—</div>
+    <div class="crash-badge" id="crashBadge" style="display:none">—</div>
+    <div class="actions">
+      <button class="act-btn" onclick="copyReport()">📋 कॉपी</button>
+      <button class="act-btn" onclick="window.print()">🖨️ प्रिंट</button>
+    </div>
+  </div>
+
+  <div class="blocks">
+
+    <!-- Block A: Vedic Core -->
+    <div class="block" id="blockA">
+      <div class="block-header" onclick="toggleBlock('blockA')">
+        <span class="block-icon">🕉</span>
+        <span class="block-title">ब्लॉक A — वैदिक कोर (7 लेयर)</span>
+        <span class="block-badge" id="blockABadge" style="background:rgba(255,107,0,.2);color:#FF6B00">—</span>
+        <span class="block-toggle">▼</span>
+      </div>
+      <div class="block-body">
+        <div class="layers" id="blockALayers">
+          <div class="loading" style="padding:20px"><div class="spinner"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Block B: Possibility Map -->
+    <div class="block" id="blockB">
+      <div class="block-header" onclick="toggleBlock('blockB')">
+        <span class="block-icon">📊</span>
+        <span class="block-title">ब्लॉक B — संभावना मानचित्र</span>
+        <span class="block-badge" id="blockBBadge" style="background:rgba(255,215,64,.15);color:#ffd740">—% विश्वास</span>
+        <span class="block-toggle">▼</span>
+      </div>
+      <div class="block-body">
+        <div class="prob-bars" id="blockBBars"></div>
+        <canvas id="probChart" height="140" style="margin-top:14px"></canvas>
+      </div>
+    </div>
+
+    <!-- Block C: Timing -->
+    <div class="block" id="blockC">
+      <div class="block-header" onclick="toggleBlock('blockC')">
+        <span class="block-icon">⏰</span>
+        <span class="block-title">ब्लॉक C — इंट्राडे टाइमिंग (19:00–01:30 IST)</span>
+        <span class="block-badge" id="blockCBadge" style="background:rgba(0,230,118,.15);color:#00e676">NY ओपन</span>
+        <span class="block-toggle">▼</span>
+      </div>
+      <div class="block-body">
+        <div class="timeline-grid" id="blockCGrid"></div>
+      </div>
+    </div>
+
+    <!-- Block D: Key Moments -->
+    <div class="block" id="blockD">
+      <div class="block-header" onclick="toggleBlock('blockD')">
+        <span class="block-icon">🎯</span>
+        <span class="block-title">ब्लॉक D — मुख्य क्षण (आज रात)</span>
+        <span class="block-badge" id="blockDBadge" style="background:rgba(144,202,249,.15);color:#90caf9">— घटनाएं</span>
+        <span class="block-toggle">▼</span>
+      </div>
+      <div class="block-body">
+        <div class="moments-list" id="blockDList"></div>
+      </div>
+    </div>
+
+    <!-- Block E: Crash Intelligence -->
+    <div class="block" id="blockE">
+      <div class="block-header" onclick="toggleBlock('blockE')">
+        <span class="block-icon">⚡</span>
+        <span class="block-title">ब्लॉक E — क्रैश इंटेलिजेंस (21 नियम)</span>
+        <span class="block-badge" id="blockEBadge" style="background:rgba(255,23,68,.15);color:#ff1744">—/100</span>
+        <span class="block-toggle">▼</span>
+      </div>
+      <div class="block-body">
+        <div class="crash-meter-wrap">
+          <div class="crash-score-big" id="crashScoreBig">—</div>
+          <div>
+            <div class="crash-cat" id="crashCatText">—</div>
+            <div style="font-size:12px;color:var(--dim);margin-top:4px" id="crashTriggCount">— नियम ट्रिगर</div>
+          </div>
+        </div>
+        <div class="rules-grid" id="blockERules"></div>
+      </div>
+    </div>
+
+    <!-- Block F: ML Pattern -->
+    <div class="block" id="blockF">
+      <div class="block-header" onclick="toggleBlock('blockF')">
+        <span class="block-icon">🤖</span>
+        <span class="block-title">ब्लॉक F — ML पैटर्न मिलान</span>
+        <span class="block-badge" id="blockFBadge" style="background:rgba(144,202,249,.15);color:#90caf9">—% औसत मिलान</span>
+        <span class="block-toggle">▼</span>
+      </div>
+      <div class="block-body">
+        <div class="ml-matches" id="blockFMatches"></div>
+        <div class="ml-verdict" id="blockFVerdict" style="display:none">—</div>
+      </div>
+    </div>
+
+  </div><!-- .blocks -->
+</div><!-- #appDiv -->
+
+<!-- VedicAladdin Engine — loaded via master loader -->
+<script src="/vendor/chart.umd.min.js" onerror="this.onerror=null;this.src='https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js'"></script>
+<script src="/assets/js/loader.js"></script>
+</body>
